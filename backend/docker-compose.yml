@@ -1,32 +1,54 @@
-services:
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.2
-    container_name: elasticsearch
-    environment:
-      - discovery.type=single-node
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - xpack.security.enabled=false
-    ports:
-      - "9200:9200"
-    volumes:
-      - esdata:/usr/share/elasticsearch/data
-    networks:
-      - mynetwork
+version: '3.8'
 
-  fastapi:
-    build: .  # Build the FastAPI app from the local Dockerfile
-    container_name: fastapi
+services:
+  fastapi-app:
+    build: .
     ports:
       - "9567:9567"
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./logs.json:/app/logs.json
     networks:
-      - mynetwork
+      - esnet
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+    command: ["sh", "-c", "sleep 15 && python app.py"]
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
+    #this environment ensures low memory and doesnt uses unncessry space
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - xpack.graph.enabled=false
+      - xpack.watcher.enabled=false
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - esnet
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sSf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2m || exit 1"]
+      interval: 10s
+      timeout: 180s
+      retries: 15
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+  
 volumes:
-  esdata:
+  es_data:
     driver: local
 
 networks:
-  mynetwork:
+  esnet:
     driver: bridge
+    name: elastic-network
