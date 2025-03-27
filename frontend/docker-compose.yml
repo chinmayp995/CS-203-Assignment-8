@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  fastapi-ui:
+    build: .
+    ports:
+      - "9567:9567"
+    environment:
+      - BACKEND_URL=http://34.100.235.148:9567
+    restart: unless-stopped
