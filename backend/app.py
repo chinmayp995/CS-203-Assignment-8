@@ -1,3 +1,5 @@
+#importing neccesary libraries
+
 from fastapi import FastAPI, Request, Query, HTTPException
 from elasticsearch import Elasticsearch, ConnectionError
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,24 +10,24 @@ import time
 
 app = FastAPI()
 
-# Configure CORS
+# configuring CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://35.200.255.237:9567"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST"],    #methods for request
     allow_headers=["*"],
 )
 
-# Configure logging
+# configuring logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Elasticsearch configuration
-ES_HOST = "elasticsearch"
-ES_PORT = 9200
+# elasticsearch configuration 
+ES_HOST = "elasticsearch"     #host for the website
+ES_PORT = 9200      #this is port on which website will be shown
 INDEX_NAME = "myindex"
-LOG_FILE = "logs.json"
+LOG_FILE = "logs.json"       # all logs will stored in this file
 
 def get_es_connection():
     """Create and verify Elasticsearch connection"""
@@ -39,20 +41,20 @@ def get_es_connection():
             sniff_on_node_failure=False
         )
         
-        # Initial connection verification
+        # initial connection verification
         if not es.ping():
             raise ConnectionError("Failed to ping Elasticsearch")
             
-        logger.info("Successfully connected to Elasticsearch")
+        logger.info("Successfully connected to Elasticsearch")    #logging info
         return es
     except ConnectionError as e:
         logger.error(f"Elasticsearch connection failed: {str(e)}")
         raise HTTPException(status_code=503, detail="Service Unavailable - Elasticsearch connection failed")
 
-# Initialize Elasticsearch connection
+# initialize elasticsearch connection
 es = get_es_connection()
 
-# Index management
+# index management
 def initialize_index():
     """Create index if not exists with proper mappings"""
     if not es.indices.exists(index=INDEX_NAME):
@@ -70,7 +72,7 @@ def initialize_index():
             )
             logger.info(f"Created index {INDEX_NAME}")
             
-            # Insert sample data
+            # inserting sample data
             sample_texts = [
                 "India, officially the Republic of India,[j][21] is a country in South Asia. It is the seventh-largest country by area; the most populous country from June 2023 onwards;[22][23] and since its independence in 1947, the world's most populous democracy.[24][25][26] Bounded by the Indian Ocean on the south, the Arabian Sea on the southwest, and the Bay of Bengal on the southeast, it shares land borders with Pakistan to the west;[k] China, Nepal, and Bhutan to the north; and Bangladesh and Myanmar to the east. In the Indian Ocean, India is near Sri Lanka and the Maldives; its Andaman and Nicobar Islands share a maritime border with Thailand, Myanmar, and Indonesia.",
                 "Modern humans arrived on the Indian subcontinent from Africa no later than 55,000 years ago.[28][29][30] Their long occupation, predominantly in isolation as hunter-gatherers, has made the region highly diverse, second only to Africa in human genetic diversity.[31] Settled life emerged on the subcontinent in the western margins of the Indus river basin 9,000 years ago, evolving gradually into the Indus Valley Civilisation of the third millennium BCE.[32] By 1200 BCE, an archaic form of Sanskrit, an Indo-European language, had diffused into India from the northwest.[33][34] Its hymns recorded the dawning of Hinduism in India.[35] India's pre-existing Dravidian languages were supplanted in the northern regions.[36] By 400 BCE, caste had emerged within Hinduism,[37] and Buddhism and Jainism had arisen, proclaiming social orders unlinked to heredity.[38] Early political consolidations gave rise to the loose-knit Maurya and Gupta Empires.[39] Widespread creativity suffused this era,[40] but the status of women declined,[41] and untouchability became an organized belief.[l][42] In South India, the Middle kingdoms exported Dravidian language scripts and religious cultures to the kingdoms of Southeast Asia.[43]",
@@ -90,24 +92,29 @@ def initialize_index():
             logger.error(f"Index initialization failed: {str(e)}")
             raise HTTPException(status_code=500, detail="Index creation failed")
 
-# Initialize index on startup
+# initializing index on startup
 initialize_index()
 
 def log_message(action: str, message: str):
-    """Centralized logging function"""
+    #centralizing logging function
+    # creating info to print logs
+
     log_entry = {
         "action": action,
         "message": message,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")    
     }
     try:
-        with open(LOG_FILE, "r+") as f:
-            logs = json.load(f)
-            logs.append(log_entry)
+        with open(LOG_FILE, "r+") as f:   # opening log file
+            logs = json.load(f)           # loading previous file
+            logs.append(log_entry)         # inserting log
             f.seek(0)
             json.dump(logs, f, indent=4)
     except Exception as e:
         logger.error(f"Log write failed: {str(e)}")
+
+
+# api endpoint to inserting document
 
 @app.post("/insert")
 async def insert_document(request: Request):
@@ -115,7 +122,7 @@ async def insert_document(request: Request):
         data = await request.json()
         text = data.get("text", "").strip()
         
-        if not text:
+        if not text:       #checking text is empty or not
             log_message("ERROR", "Empty text in insert request")
             return {"error": "Text field is required"}, 400
             
@@ -131,6 +138,8 @@ async def insert_document(request: Request):
         logger.error(f"Insert error: {str(e)}")
         return {"error": "Document insertion failed"}, 500
 
+
+# api endpoint to search document
 @app.get("/search")
 def search_document(query: str = Query(..., min_length=1)):
     try:
@@ -139,7 +148,8 @@ def search_document(query: str = Query(..., min_length=1)):
             query={"match": {"text": query}},
             size=10
         )
-        
+          
+        #extracting relevant information
         results = [{"id": hit["_id"], "text": hit["_source"]["text"]} 
                  for hit in response["hits"]["hits"]]
         
@@ -150,6 +160,8 @@ def search_document(query: str = Query(..., min_length=1)):
         logger.error(f"Search error: {str(e)}")
         return {"error": "Search operation failed"}, 500
 
+
+#entry point for running the FastAPI application
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=9567)
